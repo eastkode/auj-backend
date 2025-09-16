@@ -1,105 +1,62 @@
+const { getPool } = require('./lib/db');
 const { requireAuth } = require('./middleware/auth');
 
-// Mock user data
-let users = [
-  {
-    id: 1,
-    role_id: 1,
-    name: 'Super Admin',
-    email: 'admin@amity.com',
-    phone: '1234567890',
-    area_assigned: 'HQ',
-    is_active: true,
-  },
-  {
-    id: 2,
-    role_id: 2,
-    name: 'Admin User',
-    email: 'testadmin@amity.com',
-    phone: '0987654321',
-    area_assigned: 'Ranchi',
-    is_active: true,
-  },
-  {
-    id: 3,
-    role_id: 3,
-    name: 'Counsellor User',
-    email: 'counsellor@amity.com',
-    phone: '1122334455',
-    area_assigned: 'Patna',
-    is_active: false,
-  },
-];
-
 exports.handler = async (event, context) => {
-  // Protect this function
-  const auth = requireAuth(event, [1, 2]); // Require Super Admin or Admin role
+  // Protect this function - only Admins and Super Admins can manage users
+  const auth = requireAuth(event, [1, 2]);
   if (auth.error) {
     return auth.response;
   }
 
+  const pool = getPool();
   const path = event.path.replace(/\.netlify\/functions\/[^/]+/, '');
   const segments = path.split('/').filter(Boolean);
+  const id = segments.length === 2 ? parseInt(segments[1], 10) : null;
 
   try {
     switch (event.httpMethod) {
       case 'GET':
-        // GET /api/users or GET /api/users/:id
-        if (segments.length === 1) { // /users
-          return { statusCode: 200, body: JSON.stringify(users) };
+        if (id) {
+          const result = await pool.query('SELECT id, role_id, name, email, phone, area_assigned, is_active FROM users WHERE id = $1', [id]);
+          return result.rows.length > 0
+            ? { statusCode: 200, body: JSON.stringify(result.rows[0]) }
+            : { statusCode: 404, body: JSON.stringify({ message: 'User not found' }) };
+        } else {
+          const result = await pool.query('SELECT id, role_id, name, email, phone, area_assigned, is_active FROM users ORDER BY id');
+          return { statusCode: 200, body: JSON.stringify(result.rows) };
         }
-        if (segments.length === 2) { // /users/:id
-          const id = parseInt(segments[1], 10);
-          const user = users.find(u => u.id === id);
-          if (user) {
-            return { statusCode: 200, body: JSON.stringify(user) };
-          } else {
-            return { statusCode: 404, body: 'User not found' };
-          }
-        }
-        break;
+
       case 'POST':
-        // POST /api/users
-        const data = JSON.parse(event.body);
-        const newUser = {
-          id: Math.max(...users.map(u => u.id)) + 1,
-          ...data,
-        };
-        users.push(newUser);
-        return { statusCode: 201, body: JSON.stringify(newUser) };
+        const { role_id, name, email, phone, area_assigned, is_active } = JSON.parse(event.body);
+        // Note: This simplified POST does not handle passwords. User creation should go through the register flow.
+        // This endpoint is for admins creating user shells.
+        const postResult = await pool.query(
+          'INSERT INTO users (role_id, name, email, phone, area_assigned, is_active) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+          [role_id, name, email, phone, area_assigned, is_active]
+        );
+        return { statusCode: 201, body: JSON.stringify(postResult.rows[0]) };
+
       case 'PUT':
-        // PUT /api/users/:id
-        if (segments.length === 2) {
-          const id = parseInt(segments[1], 10);
-          const updatedData = JSON.parse(event.body);
-          const userIndex = users.findIndex(u => u.id === id);
-          if (userIndex !== -1) {
-            users[userIndex] = { ...users[userIndex], ...updatedData };
-            return { statusCode: 200, body: JSON.stringify(users[userIndex]) };
-          } else {
-            return { statusCode: 404, body: 'User not found' };
-          }
-        }
-        break;
+        if (!id) return { statusCode: 400, body: 'User ID required' };
+        const dataToUpdate = JSON.parse(event.body);
+        // A real implementation should be more robust, dynamically building the query
+        // based on fields provided to avoid updating everything.
+        const putResult = await pool.query(
+          'UPDATE users SET role_id = $1, name = $2, email = $3, phone = $4, area_assigned = $5, is_active = $6, updated_at = NOW() WHERE id = $7 RETURNING *',
+          [dataToUpdate.role_id, dataToUpdate.name, dataToUpdate.email, dataToUpdate.phone, dataToUpdate.area_assigned, dataToUpdate.is_active, id]
+        );
+        return { statusCode: 200, body: JSON.stringify(putResult.rows[0]) };
+
       case 'DELETE':
-        // DELETE /api/users/:id
-        if (segments.length === 2) {
-          const id = parseInt(segments[1], 10);
-          const userIndex = users.findIndex(u => u.id === id);
-          if (userIndex !== -1) {
-            users = users.filter(u => u.id !== id);
-            return { statusCode: 200, body: JSON.stringify({ message: 'User deleted' }) };
-          } else {
-            return { statusCode: 404, body: 'User not found' };
-          }
-        }
-        break;
+        if (!id) return { statusCode: 400, body: 'User ID required' };
+        await pool.query('DELETE FROM users WHERE id = $1', [id]);
+        return { statusCode: 200, body: JSON.stringify({ message: 'User deleted successfully' }) };
+
       default:
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
   } catch (error) {
+    console.error('Database error in users function:', error);
     return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
-
-  return { statusCode: 400, body: 'Bad Request' };
 };

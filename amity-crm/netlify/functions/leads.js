@@ -1,114 +1,90 @@
-// Mock leads data
-let leads = [
-  {
-    id: 1,
-    form_no: 'AMITY001',
-    first_name: 'John',
-    last_name: 'Doe',
-    email: 'john.doe@example.com',
-    phone: '555-1234',
-    course_applied: 'B.Tech CSE',
-    form_stage: 'form_submitted',
-    assigned_to: 3,
-    created_on: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    form_no: 'AMITY002',
-    first_name: 'Jane',
-    last_name: 'Smith',
-    email: 'jane.smith@example.com',
-    phone: '555-5678',
-    course_applied: 'MBA',
-    form_stage: 'selected',
-    assigned_to: 3,
-    created_on: new Date().toISOString(),
-  },
-];
-
+const { getPool } = require('./lib/db');
 const { requireAuth } = require('./middleware/auth');
-let entranceCalls = [];
 
 exports.handler = async (event, context) => {
-  // All lead actions require a user to be logged in.
-  const auth = requireAuth(event, [1, 2, 3]); // Super Admin, Admin, or User/Counsellor
+  const auth = requireAuth(event, [1, 2, 3]);
   if (auth.error) {
     return auth.response;
   }
 
+  const pool = getPool();
   const path = event.path.replace(/\.netlify\/functions\/[^/]+/, '');
-  const segments = path.split('/').filter(Boolean); // e.g., ['leads', '1', 'calls']
+  const segments = path.split('/').filter(Boolean);
+  const id = segments.length >= 2 && segments[0] === 'leads' ? parseInt(segments[1], 10) : null;
 
   try {
+    // Handle specific sub-routes first
+    if (id && segments[2] === 'calls') {
+      if (event.httpMethod === 'GET') {
+        const result = await pool.query('SELECT * FROM entrance_calls WHERE lead_id = $1 ORDER BY call_time DESC', [id]);
+        return { statusCode: 200, body: JSON.stringify(result.rows) };
+      }
+      if (event.httpMethod === 'POST') {
+        // called_by should come from the JWT (auth.decoded.userId)
+        const { note, status } = JSON.parse(event.body);
+        const result = await pool.query(
+          'INSERT INTO entrance_calls (lead_id, called_by, note, status) VALUES ($1, $2, $3, $4) RETURNING *',
+          [id, auth.decoded.userId, note, status]
+        );
+        return { statusCode: 201, body: JSON.stringify(result.rows[0]) };
+      }
+    }
+
+    if (event.httpMethod === 'POST' && segments[1] === 'bulk-update') {
+      const { updates } = JSON.parse(event.body); // updates = [{ form_no, result }]
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const update of updates) {
+          await client.query('UPDATE leads SET form_stage = $1, modified_on = NOW() WHERE form_no = $2', [update.result, update.form_no]);
+        }
+        await client.query('COMMIT');
+        return { statusCode: 200, body: JSON.stringify({ message: `Bulk update complete. ${updates.length} leads processed.` }) };
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Handle generic CRUD on /leads
     switch (event.httpMethod) {
-      case 'GET': // Get all leads or a single lead
-        if (segments[0] === 'leads' && segments.length === 1) {
-          return { statusCode: 200, body: JSON.stringify(leads) };
+      case 'GET':
+        if (id) {
+          const result = await pool.query('SELECT * FROM leads WHERE id = $1', [id]);
+          return result.rows.length > 0
+            ? { statusCode: 200, body: JSON.stringify(result.rows[0]) }
+            : { statusCode: 404, body: JSON.stringify({ message: 'Lead not found' }) };
+        } else {
+          const result = await pool.query('SELECT * FROM leads ORDER BY created_on DESC');
+          return { statusCode: 200, body: JSON.stringify(result.rows) };
         }
-        if (segments[0] === 'leads' && segments.length === 2) {
-          const id = parseInt(segments[1], 10);
-          const lead = leads.find(l => l.id === id);
-          return lead ? { statusCode: 200, body: JSON.stringify(lead) } : { statusCode: 404, body: 'Lead not found' };
-        }
-        break;
 
       case 'POST':
-        if (segments[0] === 'leads' && segments.length === 1) { // Create a new lead
-          const data = JSON.parse(event.body);
-          const newLead = { id: Math.max(0, ...leads.map(l => l.id)) + 1, ...data };
-          leads.push(newLead);
-          return { statusCode: 201, body: JSON.stringify(newLead) };
-        }
-        if (segments[0] === 'leads' && segments.length === 3 && segments[2] === 'calls') { // Log an entrance call
-          const leadId = parseInt(segments[1], 10);
-          const callData = JSON.parse(event.body);
-          const newCall = { id: entranceCalls.length + 1, lead_id: leadId, ...callData };
-          entranceCalls.push(newCall);
-          console.log('New Entrance Call:', newCall);
-          return { statusCode: 201, body: JSON.stringify(newCall) };
-        }
-        if (segments[0] === 'leads' && segments[1] === 'upload-results') { // This endpoint is now handled by its own function
-            return { statusCode: 404, body: 'Not Found' };
-        }
-        if (segments[0] === 'leads' && segments[1] === 'bulk-update') { // The new endpoint
-            const { updates } = JSON.parse(event.body); // updates = [{ form_no, result }]
-            let updatedCount = 0;
+        const { first_name, last_name, email, phone, course_applied } = JSON.parse(event.body);
+        const result = await pool.query(
+          'INSERT INTO leads (first_name, last_name, email, phone, course_applied) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+          [first_name, last_name, email, phone, course_applied]
+        );
+        return { statusCode: 201, body: JSON.stringify(result.rows[0]) };
 
-            updates.forEach(update => {
-                const leadIndex = leads.findIndex(l => l.form_no === update.form_no);
-                if (leadIndex !== -1) {
-                    leads[leadIndex].form_stage = update.result;
-                    updatedCount++;
-                }
-            });
-
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ message: `Bulk update complete. ${updatedCount} leads updated.` }),
-            };
-        }
-        break;
-
-      case 'PUT': // Update a lead
-        if (segments[0] === 'leads' && segments.length === 2) {
-          const id = parseInt(segments[1], 10);
-          const updatedData = JSON.parse(event.body);
-          const leadIndex = leads.findIndex(l => l.id === id);
-          if (leadIndex !== -1) {
-            leads[leadIndex] = { ...leads[leadIndex], ...updatedData };
-            return { statusCode: 200, body: JSON.stringify(leads[leadIndex]) };
-          } else {
-            return { statusCode: 404, body: 'Lead not found' };
-          }
-        }
-        break;
+      case 'PUT':
+        if (!id) return { statusCode: 400, body: 'Lead ID required' };
+        const data = JSON.parse(event.body);
+        // Build a dynamic query to only update provided fields
+        const fields = Object.keys(data);
+        const values = Object.values(data);
+        const setClause = fields.map((field, i) => `${field} = $${i + 1}`).join(', ');
+        const query = `UPDATE leads SET ${setClause}, modified_on = NOW() WHERE id = $${fields.length + 1} RETURNING *`;
+        const putResult = await pool.query(query, [...values, id]);
+        return { statusCode: 200, body: JSON.stringify(putResult.rows[0]) };
 
       default:
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
   } catch (error) {
+    console.error('Database error in leads function:', error);
     return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
-
-  return { statusCode: 400, body: 'Bad Request' };
 };

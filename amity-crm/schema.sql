@@ -161,3 +161,11 @@ SELECT 3, id FROM permissions WHERE slug IN ('manage_leads', 'manage_payments');
 -- Default Super Admin user (password: admin123)
 INSERT INTO users (role_id, name, email, phone, password_hash, area_assigned, is_active) VALUES
 (1, 'Super Admin', 'admin@amity.com', '1234567890', '$2y$10$example.hash.here', 'HQ', true);
+
+-- Courses
+CREATE TABLE courses (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) UNIQUE NOT NULL,
+  fee DECIMAL(12, 2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

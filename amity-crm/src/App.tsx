@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import UserList from './pages/admin/UserList';
 import UserForm from './pages/admin/UserForm';
 import UploadResults from './pages/admin/UploadResults';
+import CourseManagement from './pages/admin/CourseManagement';
 import LeadList from './pages/leads/LeadList';
 import LeadForm from './pages/leads/LeadForm';
 import LeadDetail from './pages/leads/LeadDetail';
@@ -33,6 +34,7 @@ function App() {
             <Route path="/admin/users/new" element={<UserForm />} />
             <Route path="/admin/users/:id/edit" element={<UserForm />} />
             <Route path="/admin/upload-results" element={<UploadResults />} />
+            <Route path="/admin/courses" element={<CourseManagement />} />
 
             <Route path="/leads" element={<LeadList />} />
             <Route path="/leads/upload" element={<UploadLead />} />

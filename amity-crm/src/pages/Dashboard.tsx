@@ -27,6 +27,11 @@ const Dashboard: React.FC = () => {
         <Button component={Link} to="/leads" variant="outlined" sx={{ mr: 1 }}>
           Manage Leads
         </Button>
+        {(isSuperAdmin || isAdmin) && (
+          <Button component={Link} to="/admin/courses" variant="outlined" sx={{ mr: 1 }}>
+            Manage Courses
+          </Button>
+        )}
         {isAdmin && (
           <Button component={Link} to="/admin/upload-results" variant="outlined">
             Upload Entrance Results

@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
 import {
-  Box, Typography, Tab, Tabs, Paper, FormControl, Select, MenuItem, InputLabel
+  Box, Typography, Tab, Tabs, Paper, FormControl, Select, MenuItem, InputLabel, Switch, FormControlLabel
 } from '@mui/material';
+import EntranceCalls from '../../components/EntranceCalls';
 
 interface Lead {
   id: number;
   form_stage: string;
+  scholarship_eligible: boolean;
+  scholarship_amount: number;
   [key: string]: any; // Allow any other properties
 }
 
@@ -45,16 +48,31 @@ const LeadDetail: React.FC = () => {
 
   const handleStatusChange = async (event: any) => {
     const newStatus = event.target.value;
+    updateLead({ form_stage: newStatus });
+  };
+
+  const handleScholarshipChange = (field: string, value: any) => {
+    let update: Partial<Lead> = { [field]: value };
+    // If toggling eligibility off, reset amount
+    if (field === 'scholarship_eligible' && !value) {
+      update.scholarship_amount = 0;
+    }
+    updateLead(update);
+  };
+
+  const updateLead = async (updateData: Partial<Lead>) => {
     if (!lead) return;
 
-    const oldLead = lead;
+    const oldLead = { ...lead };
+    const newLead = { ...lead, ...updateData };
+
     // Optimistic update
-    setLead({ ...lead, form_stage: newStatus });
+    setLead(newLead);
 
     try {
-      await axios.put(`/api/leads/${lead.id}`, { form_stage: newStatus });
+      await axios.put(`/api/leads/${lead.id}`, updateData);
     } catch (error) {
-      console.error('Failed to update lead status:', error);
+      console.error('Failed to update lead:', error);
       // Revert on error
       setLead(oldLead);
     }
@@ -90,15 +108,44 @@ const LeadDetail: React.FC = () => {
             </Select>
           </FormControl>
 
-          {Object.entries(lead).map(([key, value]) => (
-            <Typography key={key}>
-              <strong>{key}:</strong> {value}
-            </Typography>
-          ))}
+          <Box sx={{ border: '1px solid #ccc', p: 2, borderRadius: 1, mt: 2 }}>
+            <Typography variant="h6" gutterBottom>Scholarship</Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={lead.scholarship_eligible}
+                  onChange={(e) => handleScholarshipChange('scholarship_eligible', e.target.checked)}
+                />
+              }
+              label="Scholarship Eligible"
+            />
+            {lead.scholarship_eligible && (
+              <FormControl sx={{ mt: 2, minWidth: 240 }}>
+                <InputLabel>Scholarship Percentage</InputLabel>
+                <Select
+                  value={lead.scholarship_amount || 0}
+                  onChange={(e) => handleScholarshipChange('scholarship_amount', e.target.value)}
+                >
+                  <MenuItem value={0}>Not Applicable</MenuItem>
+                  <MenuItem value={25}>25%</MenuItem>
+                  <MenuItem value={50}>50%</MenuItem>
+                  <MenuItem value={100}>100%</MenuItem>
+                </Select>
+              </FormControl>
+            )}
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="h6">Lead Details</Typography>
+            {Object.entries(lead).map(([key, value]) => (
+              <Typography key={key}>
+                <strong>{key}:</strong> {String(value)}
+              </Typography>
+            ))}
+          </Box>
         </TabPanel>
         <TabPanel value={tabValue} index={1}>
-          <Typography>Entrance call history and form will be here.</Typography>
-          {/* TODO: Implement EntranceCalls component */}
+          <EntranceCalls leadId={lead.id} />
         </TabPanel>
       </Paper>
     </Box>
