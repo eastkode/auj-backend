@@ -35,9 +35,14 @@ const LeadList: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="h4">Lead Management</Typography>
-        <Button component={Link} to="/leads/new" variant="contained">
-          Add Lead
-        </Button>
+        <Box>
+          <Button component={Link} to="/leads/upload" variant="contained" color="secondary" sx={{ mr: 1 }}>
+            Upload from PDF
+          </Button>
+          <Button component={Link} to="/leads/new" variant="contained">
+            Add Lead Manually
+          </Button>
+        </Box>
       </Box>
       <TableContainer component={Paper}>
         <Table>

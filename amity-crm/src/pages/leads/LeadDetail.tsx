@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
 import {
-  Box, Typography, Tab, Tabs, Paper
+  Box, Typography, Tab, Tabs, Paper, FormControl, Select, MenuItem, InputLabel
 } from '@mui/material';
 
 interface Lead {
   id: number;
+  form_stage: string;
   [key: string]: any; // Allow any other properties
 }
 
@@ -42,6 +43,23 @@ const LeadDetail: React.FC = () => {
     setTabValue(newValue);
   };
 
+  const handleStatusChange = async (event: any) => {
+    const newStatus = event.target.value;
+    if (!lead) return;
+
+    const oldLead = lead;
+    // Optimistic update
+    setLead({ ...lead, form_stage: newStatus });
+
+    try {
+      await axios.put(`/api/leads/${lead.id}`, { form_stage: newStatus });
+    } catch (error) {
+      console.error('Failed to update lead status:', error);
+      // Revert on error
+      setLead(oldLead);
+    }
+  };
+
   if (!lead) {
     return <Typography>Loading lead details...</Typography>;
   }
@@ -59,6 +77,19 @@ const LeadDetail: React.FC = () => {
           <Tab label="Scholarships" disabled />
         </Tabs>
         <TabPanel value={tabValue} index={0}>
+          <FormControl sx={{ mb: 3, minWidth: 240 }}>
+            <InputLabel>Lead Status</InputLabel>
+            <Select value={lead.form_stage} onChange={handleStatusChange}>
+              <MenuItem value="form_submitted">Form Submitted</MenuItem>
+              <MenuItem value="entrance_pending">Entrance Pending</MenuItem>
+              <MenuItem value="selected">Selected</MenuItem>
+              <MenuItem value="not_selected">Not Selected</MenuItem>
+              <MenuItem value="waitlisted">Waitlisted</MenuItem>
+              <MenuItem value="fees_pending">Fees Pending</MenuItem>
+              <MenuItem value="admitted">Admitted</MenuItem>
+            </Select>
+          </FormControl>
+
           {Object.entries(lead).map(([key, value]) => (
             <Typography key={key}>
               <strong>{key}:</strong> {value}

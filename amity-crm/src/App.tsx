@@ -7,9 +7,11 @@ import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import UserList from './pages/admin/UserList';
 import UserForm from './pages/admin/UserForm';
+import UploadResults from './pages/admin/UploadResults';
 import LeadList from './pages/leads/LeadList';
 import LeadForm from './pages/leads/LeadForm';
 import LeadDetail from './pages/leads/LeadDetail';
+import UploadLead from './pages/leads/UploadLead';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import PrivateRoute from './components/PrivateRoute';
 
@@ -30,8 +32,10 @@ function App() {
             <Route path="/admin/users" element={<UserList />} />
             <Route path="/admin/users/new" element={<UserForm />} />
             <Route path="/admin/users/:id/edit" element={<UserForm />} />
+            <Route path="/admin/upload-results" element={<UploadResults />} />
 
             <Route path="/leads" element={<LeadList />} />
+            <Route path="/leads/upload" element={<UploadLead />} />
             <Route path="/leads/new" element={<LeadForm />} />
             <Route path="/leads/:id/edit" element={<LeadForm />} />
             <Route path="/leads/:id" element={<LeadDetail />} />

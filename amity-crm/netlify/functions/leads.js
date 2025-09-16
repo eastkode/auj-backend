@@ -26,9 +26,16 @@ let leads = [
   },
 ];
 
+const { requireAuth } = require('./middleware/auth');
 let entranceCalls = [];
 
 exports.handler = async (event, context) => {
+  // All lead actions require a user to be logged in.
+  const auth = requireAuth(event, [1, 2, 3]); // Super Admin, Admin, or User/Counsellor
+  if (auth.error) {
+    return auth.response;
+  }
+
   const path = event.path.replace(/\.netlify\/functions\/[^/]+/, '');
   const segments = path.split('/').filter(Boolean); // e.g., ['leads', '1', 'calls']
 
@@ -60,10 +67,25 @@ exports.handler = async (event, context) => {
           console.log('New Entrance Call:', newCall);
           return { statusCode: 201, body: JSON.stringify(newCall) };
         }
-        if (segments[0] === 'leads' && segments[1] === 'upload-results') { // Upload results
-            // This is a complex feature (parsing CSV, etc.). For now, we'll just acknowledge.
-            console.log('Received results upload:', event.body);
-            return { statusCode: 200, body: JSON.stringify({ message: 'Results received for processing.' }) };
+        if (segments[0] === 'leads' && segments[1] === 'upload-results') { // This endpoint is now handled by its own function
+            return { statusCode: 404, body: 'Not Found' };
+        }
+        if (segments[0] === 'leads' && segments[1] === 'bulk-update') { // The new endpoint
+            const { updates } = JSON.parse(event.body); // updates = [{ form_no, result }]
+            let updatedCount = 0;
+
+            updates.forEach(update => {
+                const leadIndex = leads.findIndex(l => l.form_no === update.form_no);
+                if (leadIndex !== -1) {
+                    leads[leadIndex].form_stage = update.result;
+                    updatedCount++;
+                }
+            });
+
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: `Bulk update complete. ${updatedCount} leads updated.` }),
+            };
         }
         break;
 
